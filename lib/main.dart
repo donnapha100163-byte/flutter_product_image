@@ -1,121 +1,298 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'add_product_page.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
+
+//////////////////////////////////////////////////////////////
+// ✅ CONFIG (แก้ตรงนี้ถ้าเปลี่ยนเครื่อง)
+//////////////////////////////////////////////////////////////
+
+const String baseUrl =
+    "http://127.0.0.1/flutter_product_image1/php_api/";
+
+//////////////////////////////////////////////////////////////
+// ✅ APP ROOT
+//////////////////////////////////////////////////////////////
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      home: ProductList(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+//////////////////////////////////////////////////////////////
+// ✅ PRODUCT LIST PAGE
+//////////////////////////////////////////////////////////////
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class ProductList extends StatefulWidget {
+  const ProductList({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ProductList> createState() => _ProductListState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _ProductListState extends State<ProductList> {
+  List products = [];
+  List filteredProducts = [];
+  final TextEditingController searchController = TextEditingController();
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    fetchProducts();
+  }
+
+  ////////////////////////////////////////////////////////////
+  // ✅ FETCH DATA
+  ////////////////////////////////////////////////////////////
+
+  Future<void> fetchProducts() async {
+    try {
+      final response = await http.get(
+        Uri.parse("${baseUrl}show_data.php"),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          products = json.decode(response.body);
+          filteredProducts = products;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error: $e");
+    }
+  }
+
+  ////////////////////////////////////////////////////////////
+  // ✅ SEARCH
+  ////////////////////////////////////////////////////////////
+
+  void filterProducts(String query) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      filteredProducts = products.where((product) {
+        final name = product['name']?.toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
     });
   }
 
+  ////////////////////////////////////////////////////////////
+  // ✅ UI
+  ////////////////////////////////////////////////////////////
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    return Scaffold(
+      appBar: AppBar(title: const Text('Product List')),
+
+      body: Column(
+        children: [
+
+          //////////////////////////////////////////////////////
+          // 🔍 SEARCH BOX
+          //////////////////////////////////////////////////////
+
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: searchController,
+              decoration: const InputDecoration(
+                labelText: 'Search by product name',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: filterProducts,
+            ),
+          ),
+
+          //////////////////////////////////////////////////////
+          // 📦 PRODUCT LIST
+          //////////////////////////////////////////////////////
+
+          Expanded(
+            child: filteredProducts.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    itemCount: filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = filteredProducts[index];
+
+                      //////////////////////////////////////////////////////
+                      // ✅ IMAGE URL (สำคัญมาก)
+                      //////////////////////////////////////////////////////
+
+                     String imageUrl =
+                         "${baseUrl}images/${product['image']}";
+    
+                      return Card(
+                        child: ListTile(
+
+                          //////////////////////////////////////////////////
+                          // 🖼 IMAGE FROM SERVER
+                          //////////////////////////////////////////////////
+
+                          leading: SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.image_not_supported),
+                            ),
+                          ),
+
+                          //////////////////////////////////////////////////
+                          // 🏷 NAME
+                          //////////////////////////////////////////////////
+
+                          title: Text(product['name'] ?? 'No Name'),
+
+                          //////////////////////////////////////////////////
+                          // 📝 DESCRIPTION
+                          //////////////////////////////////////////////////
+
+                          subtitle: Text(
+                            product['description'] ?? 'No Description',
+                          ),
+
+                          //////////////////////////////////////////////////
+                          // 💰 PRICE
+                          //////////////////////////////////////////////////
+
+                          trailing: Text(
+                            '฿${product['price'] ?? '0.00'}',
+                          ),
+
+                          //////////////////////////////////////////////////
+                          // 👉 DETAIL PAGE
+                          //////////////////////////////////////////////////
+
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ProductDetail(product: product),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+
+      ////////////////////////////////////////////////////////
+      // ✅ ADD BUTTON
+      ////////////////////////////////////////////////////////
+
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AddProductPage(),
+            ),
+          ).then((value) {
+            fetchProducts(); // ✅ รีโหลดหลังเพิ่มสินค้า
+          });
+        },
+      ),
+    );
+  }
+}
+
+//////////////////////////////////////////////////////////////
+// ✅ PRODUCT DETAIL PAGE
+//////////////////////////////////////////////////////////////
+
+class ProductDetail extends StatelessWidget {
+  final dynamic product;
+
+  const ProductDetail({super.key, required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+
+    ////////////////////////////////////////////////////////////
+    // ✅ IMAGE URL
+    ////////////////////////////////////////////////////////////
+
+    String imageUrl =
+        "${baseUrl}images/${product['image']}";
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text(product['name'] ?? 'Detail'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
+
+            //////////////////////////////////////////////////////
+            // 🖼 IMAGE
+            //////////////////////////////////////////////////////
+
+            Center(
+              child: Image.network(
+                imageUrl,
+                height: 200,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.image_not_supported, size: 100),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            //////////////////////////////////////////////////////
+            // 🏷 NAME
+            //////////////////////////////////////////////////////
+
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              product['name'] ?? '',
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            //////////////////////////////////////////////////////
+            // 📝 DESCRIPTION
+            //////////////////////////////////////////////////////
+
+            Text(product['description'] ?? ''),
+
+            const SizedBox(height: 10),
+
+            //////////////////////////////////////////////////////
+            // 💰 PRICE
+            //////////////////////////////////////////////////////
+
+            Text(
+              'ราคา: ฿${product['price']}',
+              style: const TextStyle(fontSize: 18),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
